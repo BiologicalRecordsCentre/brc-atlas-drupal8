@@ -1,0 +1,18 @@
+atlas:
+  version: 1.x
+  css:
+    layout:
+      css/leaflet.css: {}
+      css/brcatlas.umd.css: {}
+      css/atlasdrupal.css: {}
+  js:
+    js/d3.v5.min.js: {}
+    js/leaflet.js: {}
+    js/brcatlas.umd.js: {}
+    js/atlasdrupal.js: {}
+  # Uncomment the following lines if you want to set JS drupalSettings
+  # values in the module (or other PHP) file
+  dependencies:
+    - core/jquery
+    - core/drupal
+    - core/drupalSettings

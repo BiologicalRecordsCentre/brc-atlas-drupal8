@@ -1,0 +1,10 @@
+.brc-atlas-map-opts label {
+  display: inline-block;
+  margin-left: 1em;
+}
+.brc-atlas-map-opts  {
+  font-size: 1.2em;
+}
+/* .modal__overlay  {
+  z-index: 5000;
+} */

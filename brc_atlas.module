@@ -1,0 +1,83 @@
+<?php
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function brc_atlas_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'help.page.brc_atlas':
+      return t('
+        <h2>BRC Atlas module</h2>
+        <h3>What does it do?</h3>
+        <p>
+          This Drupal 8 module provides access to the BRC Atlas 
+          JavaScript library (<a href="https://github.com/BiologicalRecordsCentre/brc-atlas">GitHub repo</a>), 
+          and it&lsquo;s dependencies, from within a Drupal 8 website.
+        </p>
+        <p>
+          It adds the functionality to enable maps to be added to any Drupal content type
+          through HTML tags inserted into the pages source. 
+        </p>
+        <h3>Instructions</h3>
+        <p>ToDo...</p>
+      ');
+  }
+}
+
+/**
+ * Implements hook_preprocess_node().
+ */
+function brc_atlas_preprocess_node(&$variables) {
+  $node = $variables['node'];
+
+  $variables['#attached']['drupalSettings']['brc_atlas']['path'] = drupal_get_path('module', 'brc_atlas');
+
+  // Retrieve page alias, even if current path doesn't use alias
+  $current_path = \Drupal::service('path.current')->getPath();
+  $alias = \Drupal::service('path.alias_manager')->getAliasByPath($current_path);
+
+  // Check alias and load library it contains the string '-atlas-'
+  if (strpos($alias, '-atlas-')  !== false) {
+    // Attach the libraries included with this module (as defined
+    // in brc_atlas.libraries.yml)
+    $variables['#attached']['library'][] = 'brc_atlas/atlas';
+    // Attach any data access and config libraries added in the
+    // Drupal website's 'libraries/brcatlas' folder.
+    // (See _library_info_build hook in this module file.)
+    $variables['#attached']['library'][] = 'brc_atlas/access';
+  }
+}
+
+/**
+ * Implements hook_library_info_build().
+ * 
+ * Add dynamic library definitions.
+ *
+ * Here we are using this hook to dynamically load any javascript files placed
+ * in the /libraries/brcatlas folder on the Drupal website. We use this folder
+ * to place any configuration data access functions. 
+ *
+ * @return array[]
+ *   An array of library definitions to register, keyed by library ID. The
+ *   library ID will be prefixed with the module name automatically.
+ *
+ * @see core.libraries.yml
+ * @see hook_library_info_alter()
+ */
+function brc_atlas_library_info_build() {
+  $libraries = [];
+  $libraries['access'] = [];
+  $libraries['access']['js'] = [];
+
+  $data_access_libs = file_scan_directory('./libraries/brcatlas', '/\\.js$/');
+  
+  foreach ($data_access_libs as $file=>$obj) {
+    $libraries['access']['js'] += [
+      // Remove leading dot so that resource is relative to website root - not module
+      substr($file, 1) => [],
+    ];
+  }
+  return $libraries;
+}

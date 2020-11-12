@@ -1,0 +1,7 @@
+name: BRC Atlas library interface for Drupal
+description: Implements the BRC Atlas library within a Drupal module.
+package: Custom
+
+type: module
+core: 8.x
+configure: brc_atlas.config
