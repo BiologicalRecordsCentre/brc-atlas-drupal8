@@ -479,6 +479,9 @@
   * RGB format, e.g. rgb(100, 255, 0) or a named colour, e.g. red.
   * <li> <b>opacity</b> - a number between 0 and 1 used to set the opacity of the symbol
   * (0 is fully transparent and 1 fully opaque).
+  * <li> <b>caption</b> - an html string that will be used to update an element identified
+  * by the <i>captionId</i> option of an svg or leaflet map when the mouse cursor moves over the
+  * element representing this gr on the map.
   * </ul>
   *  @type {object}
   */
@@ -1059,6 +1062,8 @@
       };
 
       img.onload = function () {
+        var _this = this;
+
         var imageWidth = this.width;
         var imageHeight = this.height;
         fetch(worldFile).then(function (response) {
@@ -1093,9 +1098,13 @@
                 console.log(dims);
                 var clippath = d3.select('svg defs').append('clipPath').attr('id', "clippath-".concat(mapId, "-").concat(transId, "-").concat(i));
                 clippath.append('rect').attr('x', dims.x).attr('y', dims.y).attr('width', dims.width).attr('height', dims.height);
-              }
+              } // Changed to use dataURL rather than file path URL so that image can be 
+              // serialised when using the saveMap method.
 
-              var _img = gBasemaps.select("#basemap-".concat(mapId, "-").concat(transId)).append('image').attr('href', imageFile).attr('x', topLeft[0] + xShift).attr('y', topLeft[1] + yShift).attr('width', topRight[0] - topLeft[0]).attr('height', bottomLeft[1] - topLeft[1]);
+
+              var _img = gBasemaps.select("#basemap-".concat(mapId, "-").concat(transId)).append('image') //.attr('xmlns:xlink', "http://www.w3.org/1999/xlink")
+              //.attr('xlink:href', imageFile)
+              .attr('href', getDataUrl(_this)).attr('x', topLeft[0] + xShift).attr('y', topLeft[1] + yShift).attr('width', topRight[0] - topLeft[0]).attr('height', bottomLeft[1] - topLeft[1]);
 
               if (i > 0) {
                 _img.attr('clip-path', "url(#clippath-".concat(mapId, "-").concat(transId, "-").concat(i, ")"));
@@ -1112,6 +1121,19 @@
       img.src = imageFile;
     }
   }
+
+  function getDataUrl(img) {
+    // Create canvas
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d'); // Set width and height
+
+    canvas.width = img.width;
+    canvas.height = img.height; // Draw the image
+
+    ctx.drawImage(img, 0, 0);
+    return canvas.toDataURL('image/png');
+  }
+
   function transformImages(gBasemaps, trans) {
     Object.keys(basemaps).forEach(function (k) {
       var b = basemaps[k];
@@ -9274,7 +9296,7 @@
     svg.selectAll('.dotTriangle').remove();
     svg.selectAll('.dotDiamond').remove();
   }
-  function drawDots(svg, captionId, transform, accessFunction, taxonIdentifier, proj) {
+  function drawDots(svg, captionId, onclick, transform, accessFunction, taxonIdentifier, proj) {
     function getCaption(d) {
       if (d.caption) {
         return d.caption;
@@ -9310,7 +9332,7 @@
           }).style("fill", function (d) {
             return d.colour ? d.colour : data.colour;
           }).merge(circles).transition().ease(d3.easeCubic).duration(500).attr("r", function (d) {
-            return d.size ? radiusPixels * d.size : radiusPixels * data.size;
+            return d.size ? radiusPixels * d.size : radiusPixels;
           }).attr("opacity", function (d) {
             return d.opacity ? d.opacity : data.opacity;
           }).style("fill", function (d) {
@@ -9481,6 +9503,12 @@
               } else {
                 d3.select("#".concat(captionId)).html('');
               }
+            }
+          }).on('click', function (d) {
+            console.log('blah blah blah blah');
+
+            if (onclick) {
+              onclick(d.gr, d.id ? d.id : null, d.caption ? d.caption : null);
             }
           });
           return data;
@@ -9678,6 +9706,52 @@
     gLegend.attr("transform", "translate(".concat(legendX, ",").concat(legendY, ") scale(").concat(legendScale, ", ").concat(legendScale, ")"));
   }
 
+  // function serialize(svg) {
+  //   const xmlns = "http://www.w3.org/2000/xmlns/"
+  //   const xlinkns = "http://www.w3.org/1999/xlink"
+  //   const svgns = "http://www.w3.org/2000/svg"
+  //   svg = svg.cloneNode(true)
+  //   const fragment = window.location.href + "#"
+  //   const walker = document.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT)
+  //   while (walker.nextNode()) {
+  //     for (const attr of walker.currentNode.attributes) {
+  //       if (attr.value.includes(fragment)) {
+  //         attr.value = attr.value.replace(fragment, "#")
+  //       }
+  //     }
+  //   }
+  //   svg.setAttributeNS(xmlns, "xmlns", svgns)
+  //   svg.setAttributeNS(xmlns, "xmlns:xlink", xlinkns)
+  //   const serializer = new window.XMLSerializer
+  //   const string = serializer.serializeToString(svg)
+  //   return new Blob([string], {type: "image/svg+xml"})
+  // }
+  function rasterize(d3Svg) {
+    var resolve, reject;
+    var svg = d3Svg.node();
+    var promise = new Promise(function (y, n) {
+      return resolve = y, reject = n;
+    });
+    var image = new Image();
+    image.onerror = reject;
+
+    image.onload = function () {
+      var rect = svg.getBoundingClientRect(); // Create a canvas element
+
+      var canvas = document.createElement('canvas');
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      var context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0, rect.width, rect.height);
+      context.canvas.toBlob(resolve);
+    }; //image.src = URL.createObjectURL(serialize(svg))
+
+
+    var data = new XMLSerializer().serializeToString(svg);
+    image.src = "data:image/svg+xml; charset=utf8, " + encodeURIComponent(data);
+    return promise;
+  }
+
   /** @module svgMap */
   /** 
    * @param {Object} opts - Initialisation options.
@@ -9686,9 +9760,12 @@
    * @param {string} opts.proj - The projection of the map, should be 'gb', 'ir' or 'ci'. It should 
    * reflect the projection of boundary and grid data displayed on the map. It is used to generate the 'dots'
    * in the correct location.
-   * @param {number} opts.captionId - The id of a DOM element into which feature-specific HTML will be displayed
+   * @param {string} opts.captionId - The id of a DOM element into which feature-specific HTML will be displayed
    * as the mouse moves over a dot on the map. The HTML markup must be stored in an attribute called 'caption'
    * in the input data.
+  * @param {function} opts.onclick - A function that will be called if user clicks on a map
+   * element. The function will be passed these attributes, in this order, if they exist on the
+   * element: gr, id, caption. (Default - null.)
    * @param {number} opts.height - The desired height of the SVG.
    * @param {boolean} opts.expand - Indicates whether or not the map will expand to fill parent element.
    * @param {legendOpts} opts.legendOpts - Sets options for a map legend.
@@ -9723,6 +9800,8 @@
         proj = _ref$proj === void 0 ? 'gb' : _ref$proj,
         _ref$captionId = _ref.captionId,
         captionId = _ref$captionId === void 0 ? '' : _ref$captionId,
+        _ref$onclick = _ref.onclick,
+        onclick = _ref$onclick === void 0 ? null : _ref$onclick,
         _ref$height = _ref.height,
         height = _ref$height === void 0 ? 500 : _ref$height,
         _ref$expand = _ref.expand,
@@ -9878,7 +9957,7 @@
     function drawMapDots() {
       svg.select('#legend').remove(); // Remove here to avoid legend resizing if inset options changed.
 
-      drawDots(svg, captionId, trans.point, mapTypesSel[mapTypesKey], taxonIdentifier, proj).then(function (data) {
+      drawDots(svg, captionId, onclick, trans.point, mapTypesSel[mapTypesKey], taxonIdentifier, proj).then(function (data) {
         svg.select('#legend').remove(); // Also must remove here to avoid some bad effects. 
 
         legendOpts.accessorData = data.legend;
@@ -10055,6 +10134,29 @@
     function getMapWidth() {
       return trans.width;
     }
+
+    function saveMap() {
+      rasterize(svg).then(function (blob) {
+        console.log('image', blob);
+        var blobUrl = URL.createObjectURL(blob); // Create a link element
+
+        var link = document.createElement("a"); // Set link's href to point to the Blob URL
+
+        link.href = blobUrl;
+        link.download = 'map.png'; // Append link to the body
+
+        document.body.appendChild(link); // Dispatch click event on the link
+        // This is necessary as link.click() does not work on the latest firefox
+
+        link.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        })); // Remove link from body
+
+        document.body.removeChild(link);
+      });
+    }
     /**
      * @typedef {Object} api
      * @property {module:svgMap~setBoundaryColour} setBoundaryColour - Change the colour of the boundary. Pass a single argument
@@ -10089,7 +10191,8 @@
       baseMapPriorities: baseMapPriorities,
       setLegendOpts: setLegendOpts,
       redrawMap: redrawMap,
-      clearMap: clearMap
+      clearMap: clearMap,
+      saveMap: saveMap
     };
   }
 
@@ -10107,9 +10210,14 @@
    * @param {Object} opts - Initialisation options.
    * @param {string} opts.selector - The CSS selector of the element which will be the parent of the leaflet map.
    * @param {string} opts.mapid - The id for the slippy map to be created.
-   * @param {number} opts.captionId - The id of a DOM element into which feature-specific HTML will be displayed
+   * @param {string} opts.captionId - The id of a DOM element into which feature-specific HTML will be displayed
    * as the mouse moves over a dot on the map. The HTML markup must be stored in an attribute called 'caption'
    * in the input data.
+   * @param {number} opts.clusterZoomThreshold - The leaflet zoom level above which clustering will be turned
+   * off for point display (except for points in same location) (default 1 - i.e. clustering always one)
+   * @param {function} opts.onclick - A function that will be called if user clicks on a map
+   * element. The function will be passed these attributes, in this order, if they exist on the
+   * element: gr, id, caption. (Default - null.)
    * @param {number} opts.height - The desired height of the leaflet map.
    * @param {number} opts.width - The desired width of the leaflet map.
    * @param {Array.<basemapConfig>} opts.basemapConfigs - An array of map layer configuration objects.
@@ -10128,6 +10236,10 @@
         mapid = _ref$mapid === void 0 ? 'leafletMap' : _ref$mapid,
         _ref$captionId = _ref.captionId,
         captionId = _ref$captionId === void 0 ? '' : _ref$captionId,
+        _ref$clusterZoomThres = _ref.clusterZoomThreshold,
+        clusterZoomThreshold = _ref$clusterZoomThres === void 0 ? 19 : _ref$clusterZoomThres,
+        _ref$onclick = _ref.onclick,
+        onclick = _ref$onclick === void 0 ? null : _ref$onclick,
         _ref$height = _ref.height,
         height = _ref$height === void 0 ? 500 : _ref$height,
         _ref$width = _ref.width,
@@ -10146,6 +10258,7 @@
     var taxonIdentifier, precision;
     var dots = {};
     var geojsonLayers = {};
+    var markers = null;
     d3.select(selector).append('div').attr('id', mapid).style('width', "".concat(width, "px")).style('height', "".concat(height, "px")); // Create basemaps from config
 
     var selectedBaselayerName;
@@ -10235,21 +10348,61 @@
 
     var g = svg.append("g").attr("class", "leaflet-zoom-hide");
 
-    function reset() {
-      //const zoomThreshold2 = 9
+    function pointMarkers() {
+      // Hide the SVG (atlas elements)
+      d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'none');
+      svg.style('display', 'none'); // Remove any previous
 
+      if (markers) {
+        map.removeLayer(markers);
+        console.log('removing');
+      }
+
+      console.log('remaking', clusterZoomThreshold);
+      markers = L.markerClusterGroup({
+        maxClusterRadius: function maxClusterRadius(zoom) {
+          return zoom <= clusterZoomThreshold ? 80 : 1; // radius in pixels
+        }
+      });
+      dots.p0.records.forEach(function (f) {
+        // Allowed colours: https://awesomeopensource.com/project/pointhi/leaflet-color-markers
+        var iconColour = f.colour ? f.colour : dots.p0.colour;
+        var icon = new L.Icon({
+          iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-".concat(iconColour, ".png"),
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        });
+        var marker = L.marker(L.latLng(f.lat, f.lng), {
+          icon: icon,
+          id: f.id,
+          gr: f.gr,
+          caption: f.caption
+        });
+        markers.addLayer(marker);
+      });
+      map.addLayer(markers);
+
+      if (onclick) {
+        markers.on("click", function (event) {
+          var p = event.layer.options;
+          onclick(p.gr, p.id ? p.id : null, p.caption ? p.caption : null); //console.log(event.layer.options)
+        });
+      }
+    }
+
+    function reset() {
+      // Hide point markers
+      if (markers && precision !== 0) {
+        map.removeLayer(markers);
+      }
+
+      console.log('zoom', map.getZoom());
       var view = map.getBounds();
       var deg5km = 0.0447;
-      var data, buffer; // if (precision===10000 || (precision===0 && map.getZoom() <= zoomThreshold)) {
-      //   data = dots.p10000
-      //   buffer = deg5km * 1.5
-      // } else if (precision===2000 || (precision===0 && map.getZoom() <= zoomThreshold2) || !dots.p1000 || !dots.p1000.length){
-      //   data = dots.p2000
-      //   buffer = deg5km / 4
-      // } else {
-      //   data = dots.p1000
-      //   buffer = deg5km / 2
-      // }
+      var data, buffer;
 
       if (precision === 10000) {
         data = dots.p10000;
@@ -10260,23 +10413,30 @@
       } else if (precision === 2000) {
         data = dots.p2000;
         buffer = deg5km / 4;
-      } else {
+      } else if (precision === 1000) {
         data = dots.p1000;
         buffer = deg5km / 2;
+      } else {
+        data = [];
+        buffer = 0;
       }
 
       if (!data || !data.records || !data.records.length) {
-        d3.select('.legendDiv').style('display', 'none');
+        d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'none');
         svg.style('display', 'none');
         return;
       } else {
         if (legendOpts.display) {
-          d3.select('.legendDiv').style('display', 'block');
+          d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'block');
         } else {
-          d3.select('.legendDiv').style('display', 'none');
+          d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'none');
         }
 
-        svg.style('display', 'block');
+        if (precision === 0) {
+          svg.style('display', 'none');
+        } else {
+          svg.style('display', 'block');
+        }
       }
 
       var filteredData = data.records.filter(function (d) {
@@ -10284,54 +10444,67 @@
           return false;
         } else {
           if (!d.geometry) {
-            var shape = d.shape ? d.shape : data.shape;
-            var size = d.size ? d.size : data.size;
-            d.geometry = getGjson(d.gr, 'wg', shape, size);
+            if (precision !== 0) {
+              var shape = d.shape ? d.shape : data.shape;
+              var size = d.size ? d.size : data.size;
+              d.geometry = getGjson(d.gr, 'wg', shape, size);
+            }
           }
 
           return true;
         }
       });
-      var bounds = path.bounds({
-        type: "FeatureCollection",
-        features: filteredData.map(function (d) {
-          return {
-            type: "Feature",
-            geometry: d.geometry
-          };
-        })
-      });
-      var topLeft = bounds[0];
-      var bottomRight = bounds[1];
-      svg.attr("width", bottomRight[0] - topLeft[0]).attr("height", bottomRight[1] - topLeft[1]).style("left", topLeft[0] + "px").style("top", topLeft[1] + "px");
-      g.attr("transform", "translate(" + -topLeft[0] + "," + -topLeft[1] + ")"); // Update the features
 
-      var u = g.selectAll("path").data(filteredData, function (d) {
-        return d.gr;
-      });
-      u.enter().append("path").style("pointer-events", "all").on('mouseover', function (d) {
+      if (precision !== 0) {
+        // Atlas data - goes onto an SVG where D3 can work with it
+        var bounds = path.bounds({
+          type: "FeatureCollection",
+          features: filteredData.map(function (d) {
+            return {
+              type: "Feature",
+              geometry: d.geometry
+            };
+          })
+        });
+        var topLeft = bounds[0];
+        var bottomRight = bounds[1];
+        svg.attr("width", bottomRight[0] - topLeft[0]).attr("height", bottomRight[1] - topLeft[1]).style("left", topLeft[0] + "px").style("top", topLeft[1] + "px");
+        g.attr("transform", "translate(" + -topLeft[0] + "," + -topLeft[1] + ")"); // Update the features
 
-        if (captionId) {
-          if (d.caption) {
-            d3.select("#".concat(captionId)).html(d.caption);
-          } else {
-            d3.select("#".concat(captionId)).html('');
+        var u = g.selectAll("path").data(filteredData, function (d) {
+          return d.gr;
+        });
+        u.enter().append("path").style("pointer-events", "all").style("cursor", function () {
+          if (onclick) {
+            return 'pointer';
           }
-        }
-      }).merge(u).attr("d", function (d) {
-        return path(d.geometry);
-      }).attr("opacity", function (d) {
-        return d.opacity ? d.opacity : data.opacity;
-      }).style("fill", function (d) {
-        return d.colour ? d.colour : data.colour;
-      }).attr("fill", function (d) {
-        return d.colour;
-      }).attr("stroke-width", function () {
-        {
-          return '1';
-        }
-      });
-      u.exit().remove();
+        }).on('click', function (d) {
+          if (onclick) {
+            onclick(d.gr, d.id ? d.id : null, d.caption ? d.caption : null);
+          }
+        }).on('mouseover', function (d) {
+          if (captionId) {
+            if (d.caption) {
+              d3.select("#".concat(captionId)).html(d.caption);
+            } else {
+              d3.select("#".concat(captionId)).html('');
+            }
+          }
+        }).merge(u).attr("d", function (d) {
+          return path(d.geometry);
+        }).attr("opacity", function (d) {
+          return d.opacity ? d.opacity : data.opacity;
+        }).style("fill", function (d) {
+          return d.colour ? d.colour : data.colour;
+        }).attr("fill", function (d) {
+          return d.colour;
+        }).attr("stroke-width", function () {
+          {
+            return '1';
+          }
+        });
+        u.exit().remove();
+      }
     }
     /** @function setMapType
       * @param {string} newMapTypesKey - A string which a key used to identify a data accessor function. 
@@ -10381,11 +10554,15 @@
           var bbox = legendSvg.node().getBBox();
           var w = legendOpts.width ? legendOpts.width : bbox.x + bbox.width + bbox.x;
           var h = legendOpts.height ? legendOpts.height : bbox.y + bbox.height + bbox.y;
-          d3.select('.legendDiv').html("<svg class=\"legendSvg\" width=\"".concat(w, "\" height=\"").concat(h, "\">").concat(legendSvg.html(), "</svg>"));
+          d3.select("#".concat(mapid)).select('.legendDiv').html("<svg class=\"legendSvg\" width=\"".concat(w, "\" height=\"").concat(h, "\">").concat(legendSvg.html(), "</svg>"));
           legendSvg.remove();
         }
 
-        reset();
+        if (precision === 0) {
+          pointMarkers();
+        } else {
+          reset();
+        }
       });
     }
     /** @function setLegendOpts
@@ -10406,8 +10583,12 @@
 
 
     function clearMap() {
-      d3.select('.legendDiv').style('display', 'none');
-      svg.style('display', 'none');
+      d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'none');
+      svg.style('display', 'none'); // Hide point markers
+
+      if (markers) {
+        map.removeLayer(markers);
+      }
     }
     /** @function setSize
       * @description <b>This function is exposed as a method on the API returned from the leafletMap function</b>.
@@ -10541,15 +10722,28 @@
     function showOverlay(show) {
       if (show) {
         if (legendOpts.display) {
-          d3.select('.legendDiv').style('display', 'block');
+          d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'block');
         } else {
-          d3.select('.legendDiv').style('display', 'none');
+          d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'none');
         }
 
         svg.style('display', 'block');
       } else {
-        d3.select('.legendDiv').style('display', 'none');
+        d3.select("#".concat(mapid)).select('.legendDiv').style('display', 'none');
         svg.style('display', 'none');
+      }
+    }
+    /** @function changeClusterThreshold
+     * @description <b>This function allows you to change the clustering threshold zoom level for point maps</b>.
+     * @param {number} clusterZoomThreshold - The leaflet zoom level above which clustering will be turned off.
+     */
+
+
+    function changeClusterThreshold(level) {
+      clusterZoomThreshold = level;
+
+      if (precision === 0) {
+        pointMarkers();
       }
     }
     /**
@@ -10566,6 +10760,7 @@
      * @property {module:slippyMap~addGeojsonLayer} addGeojsonLayer - Add a geojson layer to the map.
      * @property {module:slippyMap~removeGeojsonLayer} removeGeojsonLayer - Remove a geojson layer from the map.
      * @property {module:slippyMap~showOverlay} showOverlay - Show/hide the overlay layer.
+     * @property {module:slippyMap~changeClusterThreshold} changeClusterThreshold - Change the zoom cluster threshold for points.
      * @property {module:slippyMap~map} lmap - Returns a reference to the leaflet map object.
      */
 
@@ -10583,6 +10778,7 @@
       addGeojsonLayer: addGeojsonLayer,
       removeGeojsonLayer: removeGeojsonLayer,
       showOverlay: showOverlay,
+      changeClusterThreshold: changeClusterThreshold,
       lmap: map
     };
   }
@@ -10730,7 +10926,7 @@
   }
 
   var name = "brcatlas";
-  var version = "0.8.1";
+  var version = "0.10.0";
   var description = "Javascript library for web-based biological records atlas mapping in the British Isles.";
   var type = "module";
   var main = "dist/brcatlas.umd.js";
@@ -10756,6 +10952,7 @@
   	d3: "^5.16.0",
   	leaflet: "^1.7.1",
   	"leaflet-control-custom": "^1.0.0",
+  	"leaflet.markercluster": "^1.5.0",
   	micromodal: "^0.4.6"
   };
   var devDependencies = {
