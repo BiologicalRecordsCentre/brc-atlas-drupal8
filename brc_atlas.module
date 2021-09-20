@@ -1,6 +1,9 @@
 <?php
 
 use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\node\Entity\NodeType;
+use \Drupal\Core\Entity\EntityInterface;
+use \Drupal\Core\Entity\Display\EntityViewDisplayInterface;
 
 /**
  * Implements hook_help().
@@ -30,16 +33,40 @@ function brc_atlas_help($route_name, RouteMatchInterface $route_match) {
  * Implements hook_preprocess_node().
  */
 function brc_atlas_preprocess_node(&$variables) {
+  
+  $variables['#attached']['drupalSettings']['brc_atlas']['path'] = drupal_get_path('module', 'brc_atlas');
   $node = $variables['node'];
 
-  $variables['#attached']['drupalSettings']['brc_atlas']['path'] = drupal_get_path('module', 'brc_atlas');
+  // Iniitalise the custom library load flag
+  $load_custom_lib = false;
 
+  // If the custom field brc_atlas_lib is present and checked,
+  // then set the custom library load flag
+  $brc_atlas_lib_field = '';
+  foreach ($node->getFieldDefinitions() as &$fd) {
+    if(property_exists($fd, 'field_type')) {
+      if ($fd->getType() === 'brc_atlas_lib') {
+        $brc_atlas_lib_field = $fd->getName();
+      }
+    }
+  }
+  if ($brc_atlas_lib_field !== '') {
+    if ($node->get($brc_atlas_lib_field)->first()->getValue()['value'] === '1') {
+      $load_custom_lib = true;
+    }
+  }
+
+  // Set the custom library load flag if the current path includes the string '-atlas-'
   // Retrieve page alias, even if current path doesn't use alias
   $current_path = \Drupal::service('path.current')->getPath();
-  $alias = \Drupal::service('path.alias_manager')->getAliasByPath($current_path);
-
+  $alias = \Drupal::service('path_alias.manager')->getAliasByPath($current_path);
   // Check alias and load library it contains the string '-atlas-'
-  if (strpos($alias, '-atlas-')  !== false) {
+  if (strpos($alias, '-atlas-') !== false) {
+    $load_custom_lib = true;
+  }
+
+  if ($load_custom_lib) {
+    dpm('Load libs');
     // Attach the libraries included with this module (as defined
     // in brc_atlas.libraries.yml)
     $variables['#attached']['library'][] = 'brc_atlas/atlas';
@@ -71,7 +98,13 @@ function brc_atlas_library_info_build() {
   $libraries['access'] = [];
   $libraries['access']['js'] = [];
 
-  $data_access_libs = file_scan_directory('./libraries/brcatlas', '/\\.js$/');
+  
+  if (is_dir('./libraries/brcatlas')) {
+    // $data_access_libs = file_scan_directory('./libraries/brcatlas', '/\\.js$/');
+    $data_access_libs =  \Drupal::service('file_system')->scanDirectory('./libraries/brcatlas', '/\\.js$/');
+  } else {
+    $data_access_libs =  [];
+  }
   
   foreach ($data_access_libs as $file=>$obj) {
     $libraries['access']['js'] += [
@@ -80,4 +113,37 @@ function brc_atlas_library_info_build() {
     ];
   }
   return $libraries;
+}
+
+/**
+ * Implements hook_entity_extra_field_info().
+ */
+// function brc_atlas_entity_extra_field_info() {
+//   $extra = array();
+
+//   foreach (NodeType::loadMultiple() as $bundle) {
+//     $extra['node'][$bundle->Id()]['display']['my_own_pseudo_field'] = array(
+//       'label' => t('My own field'),
+//       'description' => t('This is my own pseudo-field'),
+//       'weight' => 100,
+//       'visible' => TRUE,
+//     );
+//   }
+
+//   return $extra;
+// }
+
+/**
+ * Implements hook_ENTITY_TYPE_view for nodes
+ *
+ *  - render our pseudo fields
+ */
+function brc_atlas_node_view(array &$build, EntityInterface $entity, EntityViewDisplayInterface $display, $view_mode) {
+
+  if ($display->getComponent('my_own_pseudo_field')) {
+    $build['my_own_pseudo_field'] = array(
+      '#type' => 'markup',
+      '#markup' => '<input type="hidden" value="3487">'
+    );
+  }
 }

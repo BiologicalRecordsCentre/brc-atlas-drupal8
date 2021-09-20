@@ -3,5 +3,5 @@ description: Implements the BRC Atlas library within a Drupal module.
 package: Custom
 
 type: module
-core: 8.x
+core_version_requirement: ^8.8 || ^9
 configure: brc_atlas.config
